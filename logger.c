@@ -69,7 +69,8 @@ static int split_new_file()
     DIR *dir = opendir(log_config->log_dir);
     if ( dir != NULL )
     {
-        char file_date_min[MAX_FILE_PATH_LEN] = "zzzzzz";
+        char file_date_min[MAX_FILE_PATH_LEN] = "~~";
+        boolean is_find = false;
         struct dirent *entry;
         int file_num = 0;
         while ( (entry = readdir(dir)) != NULL )
@@ -79,12 +80,13 @@ static int split_new_file()
                 if ( strcmp(entry->d_name, file_date_min) < 0 )
                 {
                     strcpy(file_date_min, entry->d_name);
+                    is_find = true;
                 }
                 file_num++;
             }
         }
         // check current log file number 
-        if ( file_num >= log_config->files_num&& strstr(file_date_min, "zzzzzz") == NULL )
+        if ( file_num >= log_config->files_num && is_find )
         {
             // if delete oldest log file successfully, create new log file
             char file_delete_str[MAX_FILE_PATH_LEN] = {0};
@@ -153,17 +155,43 @@ void logger_init(char *log_path)
 
     strcpy(log_config->log_dir, log_path);
     strcat(log_config->log_dir, "/");
-    sprintf(log_config->log_name_cur, "%s%s_%d.log", log_config->log_dir, LOG_NAME_PREFIX, get_ts());
-
     if ( !is_dir_exist(log_config->log_dir) )
     {
         create_dir(log_config->log_dir);
     }
 
-    if ( split_new_file() == FAILURE )
+    // reuse
+    DIR *dir = opendir(log_config->log_dir);
+    char file_date_max[MAX_FILE_PATH_LEN] = "  ";
+    boolean log_exist = false;
+    if ( dir != NULL )
     {
-        log_config->file_cur = fopen(log_config->log_name_cur, "a+");
+        struct dirent *entry;
+        int file_num = 0;
+        while ( (entry = readdir(dir)) != NULL )
+        {
+            if ( strstr(entry->d_name, LOG_NAME_PREFIX) != NULL )
+            {
+                if ( strcmp(entry->d_name, file_date_max) > 0 )
+                {
+                    log_exist = true;
+                    strcpy(file_date_max, entry->d_name);
+                }
+                file_num++;
+            }
+        }
     }
+    if ( log_exist )
+    {
+        sprintf(log_config->log_name_cur, "%s%s", log_config->log_dir, file_date_max);
+    }
+    else
+    {
+        sprintf(log_config->log_name_cur, "%s%s_%d.log", log_config->log_dir, LOG_NAME_PREFIX, get_ts());
+    }
+
+    log_config->file_cur = fopen(log_config->log_name_cur, "a");
+
     if ( log_config->file_cur == NULL )
     {
         pthread_mutex_unlock(&mutex);
